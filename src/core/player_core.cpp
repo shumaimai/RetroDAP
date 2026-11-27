@@ -217,6 +217,7 @@ static void* decodeThreadMain(void* userData) {
         std::vector<int16_t> raw(inputFrameChunk * channels);
         std::vector<int16_t> stereo;
         std::vector<int16_t> converted;
+        size_t convertedOffsetBytes = 0;
 
         while (!engine->exitThread && !restart) {
             pthread_mutex_lock(&engine->mutex);
@@ -234,6 +235,8 @@ static void* decodeThreadMain(void* userData) {
             if (handleSeekIfRequested(engine, decoder)) {
                 endOfStream = false;
                 resamplePosition = 0.0;
+                converted.clear();
+                convertedOffsetBytes = 0;
             }
 
             if (endOfStream) {
@@ -249,34 +252,47 @@ static void* decodeThreadMain(void* userData) {
                 continue;
             }
 
-            size_t writableFrames = engine->ring.availableWrite() / 4;
-            if (writableFrames < 256) {
-                usleep(3000);
-                continue;
+            if (convertedOffsetBytes >= converted.size() * sizeof(int16_t)) {
+                converted.clear();
+                convertedOffsetBytes = 0;
             }
 
-            uint64_t framesRead = decoder.readFramesS16(&raw[0], inputFrameChunk);
-            if (framesRead == 0) {
-                pthread_mutex_lock(&engine->mutex);
-                if (index + 1 < static_cast<int>(engine->queue.size())) {
-                    engine->pendingIndex = index + 1;
-                    restart = true;
-                } else {
-                    endOfStream = true;
+            if (converted.empty()) {
+                if (engine->ring.availableWrite() < 256 * 4) {
+                    usleep(3000);
+                    continue;
                 }
-                pthread_mutex_unlock(&engine->mutex);
-                continue;
+
+                uint64_t framesRead = decoder.readFramesS16(&raw[0], inputFrameChunk);
+                if (framesRead == 0) {
+                    pthread_mutex_lock(&engine->mutex);
+                    if (index + 1 < static_cast<int>(engine->queue.size())) {
+                        engine->pendingIndex = index + 1;
+                        restart = true;
+                    } else {
+                        endOfStream = true;
+                    }
+                    pthread_mutex_unlock(&engine->mutex);
+                    continue;
+                }
+
+                convertToStereo(&raw[0], static_cast<size_t>(framesRead), channels, stereo);
+                resampleNearest(stereo, inputRate, outputRate, resamplePosition, converted);
+                if (converted.empty()) {
+                    continue;
+                }
             }
 
-            convertToStereo(&raw[0], static_cast<size_t>(framesRead), channels, stereo);
-            resampleNearest(stereo, inputRate, outputRate, resamplePosition, converted);
-            size_t outputFrames = converted.size() / 2;
-            size_t framesToWrite = std::min(outputFrames, engine->ring.availableWrite() / 4);
+            size_t pendingBytes = converted.size() * sizeof(int16_t) - convertedOffsetBytes;
+            size_t framesToWrite = std::min(pendingBytes / 4, engine->ring.availableWrite() / 4);
             if (framesToWrite == 0) {
+                usleep(1000);
                 continue;
             }
             size_t bytesToWrite = framesToWrite * 4;
-            size_t written = engine->ring.write(&converted[0], bytesToWrite);
+            const uint8_t* bytes = reinterpret_cast<const uint8_t*>(&converted[0]) + convertedOffsetBytes;
+            size_t written = engine->ring.write(bytes, bytesToWrite);
+            convertedOffsetBytes += written;
             engine->producedFrames += static_cast<uint32_t>(written / 4);
         }
         decoder.close();
