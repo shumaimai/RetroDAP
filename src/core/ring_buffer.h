@@ -25,6 +25,8 @@ private:
     std::vector<uint8_t> buffer_;
     volatile uint32_t readIndex_;
     volatile uint32_t writeIndex_;
+    volatile int activeReaders_;
+    volatile int resetInProgress_;
 };
 
 } // namespace retrodap

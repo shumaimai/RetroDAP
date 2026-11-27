@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <sched.h>
 
 namespace retrodap {
 
@@ -10,7 +11,8 @@ static inline void memoryBarrier() {
 }
 
 SPSCRingBuffer::SPSCRingBuffer(size_t capacityBytes)
-    : buffer_(roundPowerOfTwo(capacityBytes)), readIndex_(0), writeIndex_(0) {
+    : buffer_(roundPowerOfTwo(capacityBytes)), readIndex_(0), writeIndex_(0),
+      activeReaders_(0), resetInProgress_(0) {
 }
 
 size_t SPSCRingBuffer::roundPowerOfTwo(size_t value) {
@@ -54,6 +56,16 @@ size_t SPSCRingBuffer::write(const void* data, size_t bytes) {
 }
 
 size_t SPSCRingBuffer::read(void* data, size_t bytes) {
+    if (resetInProgress_) {
+        return 0;
+    }
+    __sync_fetch_and_add(&activeReaders_, 1);
+    memoryBarrier();
+    if (resetInProgress_) {
+        __sync_fetch_and_sub(&activeReaders_, 1);
+        return 0;
+    }
+
     uint8_t* destination = static_cast<uint8_t*>(data);
     size_t count = std::min(bytes, availableRead());
     uint32_t readIndex = readIndex_;
@@ -67,13 +79,21 @@ size_t SPSCRingBuffer::read(void* data, size_t bytes) {
     }
     memoryBarrier();
     readIndex_ = (readIndex + static_cast<uint32_t>(count)) & mask;
+    memoryBarrier();
+    __sync_fetch_and_sub(&activeReaders_, 1);
     return count;
 }
 
 void SPSCRingBuffer::reset() {
+    resetInProgress_ = 1;
     memoryBarrier();
+    while (activeReaders_ != 0) {
+        sched_yield();
+    }
     readIndex_ = 0;
     writeIndex_ = 0;
+    memoryBarrier();
+    resetInProgress_ = 0;
     memoryBarrier();
 }
 
