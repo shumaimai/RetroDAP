@@ -1,0 +1,9 @@
+Package: com.retrodap.player
+Name: RetroDAP
+Version: 0.1.0
+Architecture: iphoneos-arm
+Description: Dedicated FLAC audio player for jailbroken iPhone 4S on iOS 6
+Maintainer: shumaimai
+Author: shumaimai
+Section: Multimedia
+Depends: firmware (>= 6.0)
