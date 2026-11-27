@@ -133,8 +133,15 @@ static void convertToStereo(const int16_t* input, size_t frames, unsigned int ch
         }
     } else {
         for (size_t i = 0; i < frames; ++i) {
-            output[i * 2] = input[i * channels];
-            output[i * 2 + 1] = input[i * channels + 1];
+            int left = input[i * channels];
+            int right = input[i * channels + 1];
+            if (channels >= 3) {
+                int center = input[i * channels + 2] / 2;
+                left += center;
+                right += center;
+            }
+            output[i * 2] = static_cast<int16_t>(std::max(-32768, std::min(32767, left)));
+            output[i * 2 + 1] = static_cast<int16_t>(std::max(-32768, std::min(32767, right)));
         }
     }
 }
