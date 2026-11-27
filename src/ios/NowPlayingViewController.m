@@ -249,9 +249,7 @@ static NSString* RetroDAPUTF8String(const char* text) {
     }
     [playButton_ setTitle:rdap_engine_is_playing(engine_) ? @"||" : @">" forState:UIControlStateNormal];
 
-    if (trackChanged) {
-        [self updateNowPlayingInfo:&info artwork:artwork position:position];
-    }
+    [self updateNowPlayingInfo:&info artwork:artwork position:position];
 }
 
 - (void)updateRouteLabel {
