@@ -32,6 +32,7 @@ struct RDEngine {
     volatile int seekPending;
     volatile double seekSeconds;
     volatile int currentIndex;
+    volatile int endOfQueue;
     volatile unsigned int outputSampleRate;
     volatile uint32_t producedFrames;
     volatile uint32_t consumedFrames;
@@ -41,7 +42,7 @@ struct RDEngine {
 
     explicit RDEngine(size_t ringBytes)
         : threadStarted(false), ring(ringBytes), exitThread(0), playing(0),
-          pendingIndex(-1), seekPending(0), seekSeconds(0.0), currentIndex(-1),
+          pendingIndex(-1), seekPending(0), seekSeconds(0.0), currentIndex(-1), endOfQueue(0),
           outputSampleRate(44100), producedFrames(0), consumedFrames(0), trackStartProducedFrames(0) {
         pthread_mutex_init(&mutex, NULL);
         pthread_cond_init(&condition, NULL);
@@ -282,6 +283,7 @@ static void* decodeThreadMain(void* userData) {
             if (endOfStream) {
                 if (engine->ring.availableRead() == 0) {
                     engine->playing = 0;
+                    engine->endOfQueue = 1;
                 }
                 usleep(5000);
                 continue;
@@ -381,6 +383,7 @@ int rdap_engine_set_queue(RDEngine* engine, const char** paths, size_t count) {
     engine->playing = 0;
     engine->pendingIndex = -1;
     engine->seekPending = 0;
+    engine->endOfQueue = 0;
     engine->currentIndex = engine->queue.empty() ? -1 : 0;
     pthread_mutex_unlock(&engine->mutex);
     engine->ring.reset();
@@ -401,6 +404,7 @@ int rdap_engine_play_index(RDEngine* engine, size_t index) {
     }
     engine->pendingIndex = static_cast<int>(index);
     engine->seekPending = 0;
+    engine->endOfQueue = 0;
     engine->playing = 1;
     pthread_cond_signal(&engine->condition);
     pthread_mutex_unlock(&engine->mutex);
@@ -420,6 +424,10 @@ void rdap_engine_resume(RDEngine* engine) {
     }
     pthread_mutex_lock(&engine->mutex);
     if (!engine->queue.empty() && engine->currentIndex >= 0) {
+        if (engine->endOfQueue) {
+            engine->pendingIndex = engine->currentIndex;
+            engine->endOfQueue = 0;
+        }
         engine->playing = 1;
         pthread_cond_signal(&engine->condition);
     }
