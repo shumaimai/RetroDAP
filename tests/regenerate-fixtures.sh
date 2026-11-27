@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/fixtures"
 
 ffmpeg -v error -y \
     -f lavfi -i "sine=frequency=440:sample_rate=44100:duration=2" \
@@ -14,8 +14,8 @@ ffmpeg -v error -y -i test.flac -map 0:a -af 'pan=stereo|c0=c0|c1=c0' \
 ffmpeg -v error -y -f lavfi -i "sine=frequency=880:sample_rate=96000:duration=1" \
     -af aformat=sample_fmts=s32 -c:a flac hires.flac
 
-if [ ! -f /tmp/retrodap-sample-source.flac ]; then
-    curl -L --retry 3 -o /tmp/retrodap-sample-source.flac \
-        https://filesamples.com/samples/audio/flac/sample1.flac
-fi
-ffmpeg -v error -y -i /tmp/retrodap-sample-source.flac -t 3 -c:a flac downloaded-sample.flac
+TMP_SOURCE=$(mktemp "${TMPDIR:-/tmp}/retrodap-sample.XXXXXX")
+trap 'rm -f "$TMP_SOURCE"' EXIT HUP INT TERM
+curl -L --retry 3 -o "$TMP_SOURCE" \
+    https://filesamples.com/samples/audio/flac/sample1.flac
+ffmpeg -v error -y -i "$TMP_SOURCE" -t 3 -c:a flac downloaded-sample.flac
