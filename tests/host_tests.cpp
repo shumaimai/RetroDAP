@@ -178,6 +178,7 @@ static void testPlayerCore(const std::string& hires) {
 
     rdap_engine_seek_seconds(engine, 0.25);
     usleep(50000);
+    CHECK(rdap_engine_position_seconds(engine) >= 0.24);
     rdap_engine_pause(engine);
     memset(output, 1, sizeof(output));
     CHECK(rdap_engine_render(engine, output, 128) == 0);
