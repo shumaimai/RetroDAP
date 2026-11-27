@@ -176,16 +176,22 @@ static NSString* RetroDAPUTF8String(const char* text) {
     if (info->artworkSize == 0 || info->artworkSize > 8 * 1024 * 1024) {
         return nil;
     }
-    NSString* key = RetroDAPUTF8String(info->path);
-    UIImage* cached = [artworkCache_ objectForKey:key];
-    if (cached != nil) {
-        return cached;
-    }
     void* bytes = malloc(info->artworkSize);
     if (bytes == NULL) {
         return nil;
     }
     rdap_engine_current_artwork(engine_, bytes, info->artworkSize);
+    const unsigned char* artworkBytes = (const unsigned char*)bytes;
+    uint64_t hash = 1469598103934665603ULL;
+    for (size_t i = 0; i < info->artworkSize; ++i) {
+        hash = (hash ^ artworkBytes[i]) * 1099511628211ULL;
+    }
+    NSString* key = [NSString stringWithFormat:@"%@:%lu:%qx", RetroDAPUTF8String(info->path), (unsigned long)info->artworkSize, (unsigned long long)hash];
+    UIImage* cached = [artworkCache_ objectForKey:key];
+    if (cached != nil) {
+        free(bytes);
+        return cached;
+    }
     NSData* data = [NSData dataWithBytes:bytes length:info->artworkSize];
     free(bytes);
     UIImage* resized = [self resizedArtworkFromData:data];
