@@ -37,13 +37,14 @@ struct RDEngine {
     volatile uint32_t producedFrames;
     volatile uint32_t consumedFrames;
     volatile uint32_t trackStartProducedFrames;
+    volatile uint32_t seekBaseFrames;
 
     TrackMetadata currentMetadata;
 
     explicit RDEngine(size_t ringBytes)
         : threadStarted(false), ring(ringBytes), exitThread(0), playing(0),
           pendingIndex(-1), seekPending(0), seekSeconds(0.0), currentIndex(-1), endOfQueue(0),
-          outputSampleRate(44100), producedFrames(0), consumedFrames(0), trackStartProducedFrames(0) {
+          outputSampleRate(44100), producedFrames(0), consumedFrames(0), trackStartProducedFrames(0), seekBaseFrames(0) {
         pthread_mutex_init(&mutex, NULL);
         pthread_cond_init(&condition, NULL);
     }
@@ -196,6 +197,8 @@ static bool handleSeekIfRequested(RDEngine* engine, FlacDecoder& decoder) {
     engine->producedFrames = 0;
     engine->consumedFrames = 0;
     engine->trackStartProducedFrames = 0;
+    unsigned int outputRate = engine->outputSampleRate;
+    engine->seekBaseFrames = outputRate == 0 ? 0 : static_cast<uint32_t>(seconds * outputRate + 0.5);
     return true;
 }
 
@@ -249,6 +252,7 @@ static void* decodeThreadMain(void* userData) {
         unsigned int outputRate = chooseOutputRate(inputRate);
         unsigned int channels = std::max(1u, decoder.channels());
         engine->trackStartProducedFrames = engine->producedFrames;
+        engine->seekBaseFrames = 0;
         updateCurrentMetadata(engine, metadata, outputRate, index);
 
         bool restart = false;
@@ -269,6 +273,7 @@ static void* decodeThreadMain(void* userData) {
                 engine->producedFrames = 0;
                 engine->consumedFrames = 0;
                 engine->trackStartProducedFrames = 0;
+                engine->seekBaseFrames = 0;
                 restart = true;
                 break;
             }
@@ -390,6 +395,7 @@ int rdap_engine_set_queue(RDEngine* engine, const char** paths, size_t count) {
     engine->producedFrames = 0;
     engine->consumedFrames = 0;
     engine->trackStartProducedFrames = 0;
+    engine->seekBaseFrames = 0;
     return 1;
 }
 
@@ -443,6 +449,7 @@ void rdap_engine_stop(RDEngine* engine) {
     engine->producedFrames = 0;
     engine->consumedFrames = 0;
     engine->trackStartProducedFrames = 0;
+    engine->seekBaseFrames = 0;
 }
 
 void rdap_engine_next(RDEngine* engine) {
@@ -536,10 +543,11 @@ double rdap_engine_position_seconds(RDEngine* engine) {
     uint32_t consumed = engine->consumedFrames;
     uint32_t start = engine->trackStartProducedFrames;
     int32_t elapsedFrames = static_cast<int32_t>(consumed - start);
+    double basePosition = static_cast<double>(engine->seekBaseFrames) / engine->outputSampleRate;
     if (elapsedFrames < 0) {
-        return 0.0;
+        return basePosition;
     }
-    return static_cast<double>(elapsedFrames) / engine->outputSampleRate;
+    return basePosition + static_cast<double>(elapsedFrames) / engine->outputSampleRate;
 }
 
 int rdap_engine_current_info(RDEngine* engine, RDTrackInfo* info) {
