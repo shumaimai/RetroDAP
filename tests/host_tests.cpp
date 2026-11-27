@@ -201,6 +201,7 @@ static void testPlayerCore(const std::string& hires) {
     usleep(20000);
     rdap_engine_resume(engine);
     CHECK(renderFrames(engine, 128) > 0);
+    CHECK(rdap_engine_position_seconds(engine) >= 0.24);
     rdap_engine_destroy(engine);
 }
 
