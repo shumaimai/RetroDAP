@@ -135,15 +135,14 @@ static void testLibraryScan(const std::string& root) {
     rdap_library_destroy(library);
 }
 
-static void waitForFrames(RDEngine* engine, uint32_t frames) {
-    for (int i = 0; i < 100; ++i) {
-        int16_t scratch[256];
-        (void)scratch;
-        if (rdap_engine_position_seconds(engine) * rdap_engine_output_sample_rate(engine) >= frames) {
-            return;
-        }
+static size_t renderFrames(RDEngine* engine, size_t frames) {
+    int16_t scratch[128 * 2];
+    size_t rendered = 0;
+    for (int i = 0; i < 100 && rendered < frames; ++i) {
+        rendered += rdap_engine_render(engine, scratch, 128);
         usleep(10000);
     }
+    return rendered;
 }
 
 static void testPlayerCore(const std::string& hires) {
@@ -190,7 +189,7 @@ static void testPlayerCore(const std::string& hires) {
     }
     CHECK(allZero);
     rdap_engine_resume(engine);
-    waitForFrames(engine, 1);
+    CHECK(renderFrames(engine, 128) > 0);
     rdap_engine_destroy(engine);
 }
 
