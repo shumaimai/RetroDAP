@@ -135,10 +135,17 @@ static void convertToStereo(const int16_t* input, size_t frames, unsigned int ch
         for (size_t i = 0; i < frames; ++i) {
             int left = input[i * channels];
             int right = input[i * channels + 1];
-            if (channels >= 3) {
-                int center = input[i * channels + 2] / 2;
-                left += center;
-                right += center;
+            if (channels == 4) {
+                left = left / 2 + input[i * channels + 2] / 2;
+                right = right / 2 + input[i * channels + 3] / 2;
+            } else if (channels >= 3) {
+                int center = input[i * channels + 2] / 4;
+                left = left / 2 + center;
+                right = right / 2 + center;
+                if (channels >= 6) {
+                    left += input[i * channels + 4] / 4;
+                    right += input[i * channels + 5] / 4;
+                }
             }
             output[i * 2] = static_cast<int16_t>(std::max(-32768, std::min(32767, left)));
             output[i * 2 + 1] = static_cast<int16_t>(std::max(-32768, std::min(32767, right)));
@@ -500,6 +507,7 @@ void rdap_engine_seek_seconds(RDEngine* engine, double seconds) {
     pthread_mutex_lock(&engine->mutex);
     engine->seekSeconds = seconds;
     engine->seekPending = 1;
+    engine->endOfQueue = 0;
     pthread_cond_signal(&engine->condition);
     pthread_mutex_unlock(&engine->mutex);
 }
