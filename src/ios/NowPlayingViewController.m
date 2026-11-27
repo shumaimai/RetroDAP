@@ -6,6 +6,18 @@
 #import "AudioOutputController.h"
 #import "RetroDAPAppDelegate.h"
 
+static NSString* RetroDAPUTF8String(const char* text) {
+    if (text == NULL) {
+        return nil;
+    }
+    NSString* value = [NSString stringWithUTF8String:text];
+    if (value != nil) {
+        return value;
+    }
+    value = [NSString stringWithCString:text encoding:NSISOLatin1StringEncoding];
+    return value != nil ? value : @"";
+}
+
 @implementation NowPlayingViewController
 
 - (id)initWithEngine:(RDEngine*)engine audioOutput:(AudioOutputController*)audioOutput {
@@ -164,7 +176,7 @@
     if (info->artworkSize == 0 || info->artworkSize > 8 * 1024 * 1024) {
         return nil;
     }
-    NSString* key = [NSString stringWithUTF8String:info->path];
+    NSString* key = RetroDAPUTF8String(info->path);
     UIImage* cached = [artworkCache_ objectForKey:key];
     if (cached != nil) {
         return cached;
@@ -186,13 +198,13 @@
 - (void)updateNowPlayingInfo:(RDTrackInfo*)info artwork:(UIImage*)artwork position:(double)position {
     NSMutableDictionary* nowPlaying = [NSMutableDictionary dictionary];
     if (info->title[0] != '\0') {
-        [nowPlaying setObject:[NSString stringWithUTF8String:info->title] forKey:MPMediaItemPropertyTitle];
+        [nowPlaying setObject:RetroDAPUTF8String(info->title) forKey:MPMediaItemPropertyTitle];
     }
     if (info->artist[0] != '\0') {
-        [nowPlaying setObject:[NSString stringWithUTF8String:info->artist] forKey:MPMediaItemPropertyArtist];
+        [nowPlaying setObject:RetroDAPUTF8String(info->artist) forKey:MPMediaItemPropertyArtist];
     }
     if (info->album[0] != '\0') {
-        [nowPlaying setObject:[NSString stringWithUTF8String:info->album] forKey:MPMediaItemPropertyAlbumTitle];
+        [nowPlaying setObject:RetroDAPUTF8String(info->album) forKey:MPMediaItemPropertyAlbumTitle];
     }
     [nowPlaying setObject:[NSNumber numberWithDouble:info->durationSeconds] forKey:MPMediaItemPropertyPlaybackDuration];
     [nowPlaying setObject:[NSNumber numberWithDouble:position] forKey:MPNowPlayingInfoPropertyElapsedPlaybackTime];
@@ -212,7 +224,7 @@
         return;
     }
 
-    NSString* path = [NSString stringWithUTF8String:info.path];
+    NSString* path = RetroDAPUTF8String(info.path);
     BOOL trackChanged = currentPath_ == nil || ![currentPath_ isEqualToString:path];
     UIImage* artwork = nil;
     if (trackChanged) {
@@ -220,9 +232,9 @@
         currentPath_ = [path retain];
         artwork = [self artworkForInfo:&info];
         artworkView_.image = artwork;
-        titleLabel_.text = info.title[0] != '\0' ? [NSString stringWithUTF8String:info.title] : [path lastPathComponent];
-        artistLabel_.text = info.artist[0] != '\0' ? [NSString stringWithUTF8String:info.artist] : @"Unknown Artist";
-        albumLabel_.text = info.album[0] != '\0' ? [NSString stringWithUTF8String:info.album] : @"Unknown Album";
+        titleLabel_.text = info.title[0] != '\0' ? RetroDAPUTF8String(info.title) : [path lastPathComponent];
+        artistLabel_.text = info.artist[0] != '\0' ? RetroDAPUTF8String(info.artist) : @"Unknown Artist";
+        albumLabel_.text = info.album[0] != '\0' ? RetroDAPUTF8String(info.album) : @"Unknown Album";
         formatLabel_.text = [NSString stringWithFormat:@"FLAC %.1fkHz / %ubit / %uch  ->  %.1fkHz out", info.sampleRate / 1000.0, info.bitsPerSample, info.channels, info.outputSampleRate / 1000.0];
     } else {
         artwork = artworkView_.image;

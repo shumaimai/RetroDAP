@@ -48,11 +48,51 @@ struct RDEngine {
     }
 };
 
+static size_t utf8ValidPrefixLength(const char* text, size_t length) {
+    size_t validEnd = 0;
+    size_t i = 0;
+    while (i < length) {
+        unsigned char c = static_cast<unsigned char>(text[i]);
+        if (c < 0x80) {
+            ++i;
+            validEnd = i;
+            continue;
+        }
+        size_t sequenceLength = 0;
+        if ((c & 0xe0) == 0xc0) {
+            sequenceLength = 2;
+        } else if ((c & 0xf0) == 0xe0) {
+            sequenceLength = 3;
+        } else if ((c & 0xf8) == 0xf0) {
+            sequenceLength = 4;
+        } else {
+            break;
+        }
+        if (i + sequenceLength > length) {
+            break;
+        }
+        bool valid = true;
+        for (size_t j = 1; j < sequenceLength; ++j) {
+            if ((static_cast<unsigned char>(text[i + j]) & 0xc0) != 0x80) {
+                valid = false;
+                break;
+            }
+        }
+        if (!valid) {
+            break;
+        }
+        i += sequenceLength;
+        validEnd = i;
+    }
+    return validEnd;
+}
+
 static void copyString(char* destination, size_t capacity, const std::string& source) {
     if (capacity == 0) {
         return;
     }
     size_t count = std::min(capacity - 1, source.size());
+    count = utf8ValidPrefixLength(source.data(), count);
     memcpy(destination, source.data(), count);
     destination[count] = '\0';
 }
