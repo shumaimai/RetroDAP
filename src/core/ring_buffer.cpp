@@ -12,7 +12,7 @@ static inline void memoryBarrier() {
 
 SPSCRingBuffer::SPSCRingBuffer(size_t capacityBytes)
     : buffer_(roundPowerOfTwo(capacityBytes)), readIndex_(0), writeIndex_(0),
-      activeReaders_(0), resetInProgress_(0) {
+      activeReaders_(0), activeWriters_(0), resetInProgress_(0) {
 }
 
 size_t SPSCRingBuffer::roundPowerOfTwo(size_t value) {
@@ -39,6 +39,16 @@ size_t SPSCRingBuffer::availableWrite() const {
 }
 
 size_t SPSCRingBuffer::write(const void* data, size_t bytes) {
+    if (resetInProgress_) {
+        return 0;
+    }
+    __sync_fetch_and_add(&activeWriters_, 1);
+    memoryBarrier();
+    if (resetInProgress_) {
+        __sync_fetch_and_sub(&activeWriters_, 1);
+        return 0;
+    }
+
     const uint8_t* source = static_cast<const uint8_t*>(data);
     size_t count = std::min(bytes, availableWrite());
     uint32_t writeIndex = writeIndex_;
@@ -52,6 +62,8 @@ size_t SPSCRingBuffer::write(const void* data, size_t bytes) {
     }
     memoryBarrier();
     writeIndex_ = (writeIndex + static_cast<uint32_t>(count)) & mask;
+    memoryBarrier();
+    __sync_fetch_and_sub(&activeWriters_, 1);
     return count;
 }
 
@@ -87,7 +99,7 @@ size_t SPSCRingBuffer::read(void* data, size_t bytes) {
 void SPSCRingBuffer::reset() {
     resetInProgress_ = 1;
     memoryBarrier();
-    while (activeReaders_ != 0) {
+    while (activeReaders_ != 0 || activeWriters_ != 0) {
         sched_yield();
     }
     readIndex_ = 0;

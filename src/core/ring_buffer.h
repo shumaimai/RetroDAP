@@ -26,6 +26,7 @@ private:
     volatile uint32_t readIndex_;
     volatile uint32_t writeIndex_;
     volatile int activeReaders_;
+    volatile int activeWriters_;
     volatile int resetInProgress_;
 };
 
