@@ -97,7 +97,9 @@ size_t SPSCRingBuffer::read(void* data, size_t bytes) {
 }
 
 void SPSCRingBuffer::reset() {
-    resetInProgress_ = 1;
+    while (__sync_val_compare_and_swap(&resetInProgress_, 0, 1) != 0) {
+        sched_yield();
+    }
     memoryBarrier();
     while (activeReaders_ != 0 || activeWriters_ != 0) {
         sched_yield();
