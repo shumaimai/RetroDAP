@@ -190,6 +190,17 @@ static void testPlayerCore(const std::string& hires) {
     CHECK(allZero);
     rdap_engine_resume(engine);
     CHECK(renderFrames(engine, 128) > 0);
+
+    int16_t drain[128 * 2];
+    for (int i = 0; i < 300 && rdap_engine_is_playing(engine); ++i) {
+        rdap_engine_render(engine, drain, 128);
+        usleep(2000);
+    }
+    CHECK(!rdap_engine_is_playing(engine));
+    rdap_engine_seek_seconds(engine, 0.25);
+    usleep(20000);
+    rdap_engine_resume(engine);
+    CHECK(renderFrames(engine, 128) > 0);
     rdap_engine_destroy(engine);
 }
 
